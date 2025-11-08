@@ -1,7 +1,17 @@
 package ch.zhaw.securitylab.slcrypt.encrypt;
 
+import java.io.IOException;
 import java.io.InputStream;
+import java.security.*;
+import java.security.cert.CertificateException;
+import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
+
 import ch.zhaw.securitylab.slcrypt.FileHeader;
+
+import javax.crypto.*;
+
+import static ch.zhaw.securitylab.slcrypt.Helpers.*;
 
 /**
  * A concrete implementation of the abstract class HybridEncryption.
@@ -17,9 +27,22 @@ public class HybridEncryptionImpl extends HybridEncryption {
      */
     @Override
     protected byte[] generateSecretKey(String cipherAlgorithm, int keyLength) {
+        SecretKey key = null;
 
+        try {
+            KeyGenerator kg = KeyGenerator.getInstance(getCipherName(cipherAlgorithm));
+            kg.init(keyLength);
+            key = kg.generateKey();
+        } catch (NoSuchAlgorithmException e) {
+            System.out.println("Algorithm not supported " + e);
+        }
+
+        if (key == null) {
+            throw new IllegalStateException("Failed to generate secret key.");
+        }
         // To do...
-        return null;
+        return key.getEncoded();
+
     }
 
     /**
@@ -33,9 +56,17 @@ public class HybridEncryptionImpl extends HybridEncryption {
     @Override
     protected byte[] encryptSecretKey(byte[] secretKey, 
             InputStream certificateEncrypt) {
-
+        try {
+            CertificateFactory certFactory = CertificateFactory.getInstance("X.509");
+            X509Certificate cert = (X509Certificate) certFactory.generateCertificate(certificateEncrypt);
+            PublicKey publicKey = cert.getPublicKey();
+            Cipher cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding"); // not sure if correct
+            cipher.init(Cipher.ENCRYPT_MODE, publicKey);
+            return cipher.doFinal(secretKey);
+        } catch (CertificateException | NoSuchAlgorithmException | NoSuchPaddingException | InvalidKeyException | IllegalBlockSizeException | BadPaddingException e) {
+            throw new RuntimeException(e);
+        }
         // To do...
-        return null;
     }
 
     /**
@@ -59,8 +90,26 @@ public class HybridEncryptionImpl extends HybridEncryption {
             char authIntType, String authIntAlgorithm, 
             InputStream certificateVerify, byte[] encryptedSecretKey) {
 
+        FileHeader myHeader = new FileHeader();
+
+        SecureRandom myRandom = new SecureRandom();
+        byte[] myIV = new byte[getIVLength(getCipherName(cipherAlgorithm))];
+        myRandom.nextBytes(myIV);
+        myHeader.setIV(myIV);
+
+        myHeader.setAuthIntType(authIntType);
+        myHeader.setAuthIntAlgorithm(authIntAlgorithm);
+        myHeader.setCipherAlgorithm(cipherAlgorithm);
+
+        if (!(certificateVerify == null)) {
+            myHeader.setCertificate(inputStreamToByteArray(certificateVerify));
+        } else {
+            myHeader.setCertificate(new byte[0]);
+        }
+
+        myHeader.setEncryptedSecretKey(encryptedSecretKey);
         // To do...
-        return null;
+        return myHeader;
     }
 
     /**

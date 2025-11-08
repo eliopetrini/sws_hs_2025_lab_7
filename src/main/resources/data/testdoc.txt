@@ -1,1 +1,5 @@
+Elio Petrini
+Domenico Mercuri
+Marco Mata
+
 The ultimate test document for the security lab "Cryptography in Java"!!!
