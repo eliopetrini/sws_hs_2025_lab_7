@@ -1,5 +1,6 @@
 package ch.zhaw.securitylab.slcrypt.encrypt;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.security.*;
@@ -10,6 +11,9 @@ import java.security.cert.X509Certificate;
 import ch.zhaw.securitylab.slcrypt.FileHeader;
 
 import javax.crypto.*;
+import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
 
 import static ch.zhaw.securitylab.slcrypt.Helpers.*;
 
@@ -60,7 +64,7 @@ public class HybridEncryptionImpl extends HybridEncryption {
             CertificateFactory certFactory = CertificateFactory.getInstance("X.509");
             X509Certificate cert = (X509Certificate) certFactory.generateCertificate(certificateEncrypt);
             PublicKey publicKey = cert.getPublicKey();
-            Cipher cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding"); // not sure if correct
+            Cipher cipher = Cipher.getInstance("RSA/ECB/OAEPPadding"); // not sure if correct
             cipher.init(Cipher.ENCRYPT_MODE, publicKey);
             return cipher.doFinal(secretKey);
         } catch (CertificateException | NoSuchAlgorithmException | NoSuchPaddingException | InvalidKeyException | IllegalBlockSizeException | BadPaddingException e) {
@@ -93,7 +97,7 @@ public class HybridEncryptionImpl extends HybridEncryption {
         FileHeader myHeader = new FileHeader();
 
         SecureRandom myRandom = new SecureRandom();
-        byte[] myIV = new byte[getIVLength(getCipherName(cipherAlgorithm))];
+        byte[] myIV = new byte[getIVLength(cipherAlgorithm)];
         myRandom.nextBytes(myIV);
         myHeader.setIV(myIV);
 
@@ -126,8 +130,49 @@ public class HybridEncryptionImpl extends HybridEncryption {
     protected byte[] encryptDocument(InputStream document, 
             FileHeader fileHeader, byte[] secretKey) {
 
+        String algorithm = fileHeader.getCipherAlgorithm();
+
+        try {
+            SecretKeySpec kg = new SecretKeySpec(secretKey, getCipherName(algorithm));
+
+            Cipher c1 = Cipher.getInstance(algorithm);
+
+            if (isGCM(algorithm)) {
+                GCMParameterSpec gcmSpec = new GCMParameterSpec(128, fileHeader.getIV());
+                c1.init(Cipher.ENCRYPT_MODE, kg, gcmSpec);
+                c1.updateAAD(fileHeader.encode());
+
+            } else if (hasIV(algorithm)) {
+                IvParameterSpec ivSpec = new IvParameterSpec(fileHeader.getIV());
+                c1.init(Cipher.ENCRYPT_MODE, kg, ivSpec);
+            } else {
+                c1.init(Cipher.ENCRYPT_MODE, kg);
+            }
+
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            byte[] buffer = new byte[4096];
+            int bytesRead;
+
+            while ((bytesRead = document.read(buffer)) != -1) {
+                byte[] encryptedChunk = c1.update(buffer, 0, bytesRead);
+                if (encryptedChunk != null) {
+                    outputStream.write(encryptedChunk);
+                }
+            }
+
+            byte[] finalBytes = c1.doFinal();
+            if (finalBytes != null) {
+                outputStream.write(finalBytes);
+            }
+
+            return outputStream.toByteArray();
+
+        } catch (NoSuchAlgorithmException | NoSuchPaddingException | IllegalBlockSizeException | BadPaddingException |
+                 InvalidKeyException | IOException | InvalidAlgorithmParameterException e) {
+            throw new RuntimeException(e);
+        }
+
         // To do...
-        return null;
     }
 
     /**
