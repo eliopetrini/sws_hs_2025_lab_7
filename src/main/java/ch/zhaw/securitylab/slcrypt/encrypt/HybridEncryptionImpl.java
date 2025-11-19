@@ -7,6 +7,8 @@ import java.security.*;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
+import java.security.spec.InvalidKeySpecException;
+import java.security.spec.PKCS8EncodedKeySpec;
 
 import ch.zhaw.securitylab.slcrypt.FileHeader;
 
@@ -32,7 +34,6 @@ public class HybridEncryptionImpl extends HybridEncryption {
     @Override
     protected byte[] generateSecretKey(String cipherAlgorithm, int keyLength) {
         SecretKey key = null;
-
         try {
             KeyGenerator kg = KeyGenerator.getInstance(getCipherName(cipherAlgorithm));
             kg.init(keyLength);
@@ -102,7 +103,11 @@ public class HybridEncryptionImpl extends HybridEncryption {
         myHeader.setIV(myIV);
 
         myHeader.setAuthIntType(authIntType);
-        myHeader.setAuthIntAlgorithm(authIntAlgorithm);
+        if (myHeader.getAuthIntType() == 'N') {
+            myHeader.setAuthIntAlgorithm("");
+        } else {
+            myHeader.setAuthIntAlgorithm(authIntAlgorithm);
+        }
         myHeader.setCipherAlgorithm(cipherAlgorithm);
 
         if (!(certificateVerify == null)) {
@@ -186,9 +191,14 @@ public class HybridEncryptionImpl extends HybridEncryption {
     @Override
     protected byte[] computeMAC(byte[] dataToProtect, String macAlgorithm, 
             byte[] password) {
-
-        // To do...
-        return null;
+        try {
+            Mac mac = Mac.getInstance(macAlgorithm);
+            SecretKeySpec secretKeySpec = new SecretKeySpec(password, macAlgorithm);
+            mac.init(secretKeySpec);
+            return mac.doFinal(dataToProtect);
+        } catch (NoSuchAlgorithmException | InvalidKeyException e) {
+            return null;
+        }
     }
     
     /**
@@ -203,8 +213,20 @@ public class HybridEncryptionImpl extends HybridEncryption {
     @Override
     protected byte[] computeSignature(byte[] dataToProtect, 
             String signatureAlgorithm, InputStream privateKeySign) {
-        
+        try {
+            byte[] privateKeyBytes = inputStreamToByteArray(privateKeySign);
+            assert privateKeyBytes != null;
+            PKCS8EncodedKeySpec privateKeySpec = new PKCS8EncodedKeySpec(privateKeyBytes);
+            KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+            PrivateKey privateKey = keyFactory.generatePrivate(privateKeySpec);
+            //Signatur erstellen
+            Signature signature = Signature.getInstance(signatureAlgorithm);
+            signature.initSign(privateKey);
+            signature.update(dataToProtect);
+            return signature.sign();
+        } catch (NoSuchAlgorithmException | InvalidKeyException | InvalidKeySpecException | SignatureException e) {
+            return null;
+        }
         // To do...
-        return null;
     }
 }
