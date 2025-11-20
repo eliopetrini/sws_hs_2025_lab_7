@@ -13,6 +13,7 @@ import java.security.spec.PKCS8EncodedKeySpec;
 import ch.zhaw.securitylab.slcrypt.FileHeader;
 
 import javax.crypto.*;
+import javax.crypto.spec.ChaCha20ParameterSpec;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
@@ -146,7 +147,9 @@ public class HybridEncryptionImpl extends HybridEncryption {
                 GCMParameterSpec gcmSpec = new GCMParameterSpec(128, fileHeader.getIV());
                 c1.init(Cipher.ENCRYPT_MODE, kg, gcmSpec);
                 c1.updateAAD(fileHeader.encode());
-
+            }  else if (isCHACHA20(algorithm)) {
+                ChaCha20ParameterSpec chaCha20ParameterSpec = new ChaCha20ParameterSpec(fileHeader.getIV(), 1);
+                c1.init(Cipher.ENCRYPT_MODE, kg, chaCha20ParameterSpec);
             } else if (hasIV(algorithm)) {
                 IvParameterSpec ivSpec = new IvParameterSpec(fileHeader.getIV());
                 c1.init(Cipher.ENCRYPT_MODE, kg, ivSpec);
